@@ -7,7 +7,7 @@ endfunction
 
 " Given a '(a ...)' return a list with all elements [a, ...]
 function! Elements(list_str)
-  " Remove surrounding ( )
+  " Remove surrounding '( )
   let l:stripped = a:list_str[1:-2]
   return split(l:stripped, " ")
 endfunction
@@ -17,8 +17,8 @@ endfunction
 " other element in that list.
 " Returns a dict from 'line+col' to [line, column] for all the bound instances.
 function! GenerateDict(str)
-  " Remove surrounding ( )
-  let l:stripped = a:str[1:-2]
+  " Remove surrounding "( )"
+  let l:stripped = a:str[2:-4]
   let l:lst = []
   call substitute(l:stripped, '([^()]*)', '\=add(l:lst, submatch(0))', 'g')
 
@@ -35,9 +35,9 @@ function! GenerateDict(str)
   return l:dict
 endfunction
 
-let b:current_binding_dict = GenerateDict("((1+6 4+3 7+3 3+1 6+1) (3+9 4+5 4+7) (6+9 7+5 7+7))")
+let b:binding_dict = {}
 
-" Lookup 'line+column' in current_binding_dict and highlight all visible
+" Lookup 'line+column' in binding_dict and highlight all visible
 " elements.
 " @param start_line the first visible line
 " @param end_line the last visible line
@@ -46,22 +46,35 @@ let b:current_binding_dict = GenerateDict("((1+6 4+3 7+3 3+1 6+1) (3+9 4+5 4+7) 
 " @param column starting column of the word
 function! GenerateHighlightRules(start_line, end_line, word, line, column)
   let l:key = string(a:line) . "+" . string(a:column)
-  if has_key(b:current_binding_dict, l:key)
+  if has_key(b:binding_dict, l:key)
     let l:Filter_fun = {data -> data[0] >= a:start_line && data[0] <= a:end_line}
-    let l:filtered_list = filter(b:current_binding_dict[l:key], "l:Filter_fun(v:val)")
-    let l:match_str = '2match MatchParen /\('
-    for [line, column] in l:filtered_list[:-2]
-      let l:match_str .= '\%' . string(line) . 'l\%' . string(column+1) . 'c\|'
-    endfor
-    let [l:lline, l:lcol] = l:filtered_list[-1]
-    let l:match_str .= '\%' . string(l:lline) . 'l\%' . string(l:lcol+1).'c\)\k\+/'
-    return l:match_str
+    let l:filtered_list = filter(b:binding_dict[l:key], "l:Filter_fun(v:val)")
+    if len(l:filtered_list) >= 1
+      let l:match_str = '2match MatchParen /\('
+      for [line, column] in l:filtered_list[:-2]
+        let l:match_str .= '\%' . string(line) . 'l\%' . string(column+1) . 'c\|'
+      endfor
+      let [l:lline, l:lcol] = l:filtered_list[-1]
+      let l:match_str .= '\%' . string(l:lline) . 'l\%' . string(l:lcol+1) .'c\)\k\+/'
+      return l:match_str
+    else
+      echo 'empty list'
+      return ""
+    endif
   else
     return ""
   endif
 endfunction
 
-" This function is executed on cursor move and ties.
+" Get binding information from racket script
+let s:racket_script = expand("<sfile>:p:h") . '/../racket/draw.rkt'
+function! UpdateGetBindings()
+  let l:new_binding = system('racket ' . s:racket_script . ' ' . expand('%:p'))
+  let b:binding_dict = GenerateDict(l:new_binding)
+endfunction
+
+" This function is executed on cursor move and acts as the entrypoint for
+" the rest of script.
 function! HighlightBindings()
   2match none
   let l:cur_pos = getcurpos()
@@ -69,12 +82,8 @@ function! HighlightBindings()
   exe l:rule
 endfunction
 
-function! Simple()
-  echo 'called'
-endfunction
-
 augroup HighlightingBinding
-  " this one is which you're most likely to use?
   autocmd!
-  autocmd CursorMoved,CursorMovedI <buffer> call HighlightBindings()
+  au CursorMoved,CursorMovedI <buffer> call HighlightBindings()
+  au BufWritePost,FileReadPost <buffer> call UpdateGetBindings()
 augroup end

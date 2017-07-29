@@ -1,8 +1,13 @@
-#lang racket
+#lang racket/base
 
 (require drracket/check-syntax)
-(require racket/class)
 (require syntax/modread)
+
+(require racket/class)
+(require (only-in racket/list
+                  group-by))
+(require (only-in racket/string
+                  string-join))
 
 (define (get-data stx)
   (syntax->datum stx)
@@ -44,9 +49,9 @@
   (parameterize ([current-load-relative-directory base]
                  [current-namespace (make-base-namespace)])
     (define stx
-      (with-handlers ([exn:fail? (const #f)])
+      (with-handlers ([exn:fail? (lambda () #f)])
                      (with-module-reading-parameterization
-                       (thunk
+                       (lambda ()
                          (with-input-from-file file read-syntax/count-lines)))))
     (if expand?
       (expand stx) ;; do this while current-load-relative-directory is set
@@ -56,11 +61,23 @@
   (port-count-lines! (current-input-port))
   (read-syntax))
 
-(define filename "../test.rkt")
-
-(define arr
+(define (get-arrows filename)
   (arrows (file->syntax filename #:expand? #t)))
 
-(map
-  (lambda (ll) `(,(caar ll) ,@(map cadr ll)))
-                        (group-by (lambda (x) (car x)) arr))
+(define (generate-bindings arr)
+  (map
+    (lambda (ll) `(,(caar ll) ,@(map cadr ll)))
+    (group-by (lambda (x) (car x)) arr)))
+
+(define (format-output llst)
+  (string-append
+    "("
+    (string-join
+      (map (lambda (l) (string-append "("
+                                      (string-join l)
+                                      ")")) llst))
+    ")"))
+
+(let* ([opts (current-command-line-arguments)]
+       [filename (vector-ref opts 0)])
+  (format-output (generate-bindings (get-arrows filename))))
