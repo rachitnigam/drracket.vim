@@ -54,7 +54,7 @@ function! GenerateHighlightRules(start_line, end_line, word, line, column)
       let l:match_str .= '\%' . string(line) . 'l\%' . string(column+1) . 'c\|'
     endfor
     let [l:lline, l:lcol] = l:filtered_list[-1]
-    let l:match_str .= '\%' . string(l:lline) . 'l\%' . string(l:lcol+1) . 'c\)' . a:word . '/'
+    let l:match_str .= '\%' . string(l:lline) . 'l\%' . string(l:lcol+1).'c\)\k\+/'
     return l:match_str
   else
     return ""
