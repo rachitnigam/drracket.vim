@@ -85,5 +85,5 @@ endfunction
 augroup HighlightingBinding
   autocmd!
   au CursorMoved,CursorMovedI <buffer> call HighlightBindings()
-  au BufWritePost,FileReadPost <buffer> call UpdateGetBindings()
+  au BufWritePost,BufReadPost <buffer> call UpdateGetBindings()
 augroup end
