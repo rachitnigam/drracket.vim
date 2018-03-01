@@ -58,7 +58,7 @@ function! GenerateHighlightRules(start_line, end_line, word, line, column)
       let l:match_str .= '\%' . string(l:lline) . 'l\%' . string(l:lcol+1) .'c\)\k\+/'
       return l:match_str
     else
-      echo 'empty list'
+      echo '[RacketServer]: No binding Information'
       return ""
     endif
   else
@@ -66,11 +66,39 @@ function! GenerateHighlightRules(start_line, end_line, word, line, column)
   endif
 endfunction
 
+let s:UpdateBindingOpts = { 'shell': 'shell 1' }
+
+" Binding data may come in chunks. Append the chunks into this array.
+let s:bindingChunks = ['']
+
+" On receiving stdout from the job, append it to the bindingChunks array
+function s:UpdateBindingOpts.on_stdout(job_id, data, event) dict
+  let s:bindingChunks[-1] .= a:data[0]
+  call extend(s:bindingChunks, a:data[1:])
+endfunction
+
+function s:UpdateBindingOpts.on_stderr(job_id, data, event)
+  echo 'an error occured from UpdateBinding'
+endfunction
+
+" Once all the data is received, update the bindings
+function s:UpdateBindingOpts.on_exit(job_id, data, event)
+  if a:data != 0
+    echo 'an error occured from UpdateBinding'
+  endif
+
+  echo '[RacketServer]: Bindings updated'
+  let b:binding_dict = GenerateDict(s:bindingChunks[0])
+endfunction
+
 " Get binding information from racket script
 let s:racket_script = expand("<sfile>:p:h") . '/../racket/draw.rkt'
 function! UpdateGetBindings()
-  let l:new_binding = system('racket ' . s:racket_script . ' ' . expand('%:p'))
-  let b:binding_dict = GenerateDict(l:new_binding)
+
+  " Clear bindingChunks before the async job is invoked.
+  let s:bindingChunks = ['']
+
+  let job = jobstart(['racket', s:racket_script, expand('%:p')], s:UpdateBindingOpts)
 endfunction
 
 " This function is executed on cursor move and acts as the entrypoint for
@@ -84,6 +112,6 @@ endfunction
 
 augroup HighlightingBinding
   autocmd!
-  au CursorMoved,CursorMovedI <buffer> call HighlightBindings()
-  au BufWritePost,BufReadPost <buffer> call UpdateGetBindings()
+  au CursorMoved <buffer> call HighlightBindings()
+  au BufWritePost <buffer> call UpdateGetBindings()
 augroup end
